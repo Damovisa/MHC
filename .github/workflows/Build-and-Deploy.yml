@@ -1,0 +1,128 @@
+name: Build and Deploy
+on:
+  # Triggers the workflow on push or pull request events but only for the master branch
+  #push:
+  #  branches: [ master ]
+  #pull_request:
+  #  branches: [ master ]
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  build: 
+    name: 👷 Build
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Setup dotnet    
+        uses: actions/setup-dotnet@v1
+        with:
+         dotnet-version: '3.1.x'
+        
+      - name: Restore Dependencies
+        run: dotnet restore
+        working-directory: src/MyHealth.Web
+              
+      - name: Use Node.js
+        uses: actions/setup-node@v1
+        with:
+          node-version: '10.x'
+        
+      - name: Install bower
+        working-directory: src/MyHealth.Web
+        run: |
+          npm install -g bower   
+
+      - name: npm install, build and test
+        working-directory: src/MyHealth.Web        
+        run: |
+          npm install
+          npm run build --if-present        
+        
+      - name: dotnet build
+        run: dotnet build src/MyHealth.Web/*.csproj --configuration Release
+        
+      - name: publish
+        run: dotnet publish --no-restore -c Release
+        working-directory: src/MyHealth.Web
+        
+      - name: Upload a Build Artifact
+        uses: actions/upload-artifact@v2.2.1
+        with:
+          name: mchweb
+          path: src/**/publish/
+          
+  infra:
+    name: 🏭 Provision Resources
+    runs-on: ubuntu-latest
+    env:
+      RESOURCE_GROUP_NAME: githubactiondemo
+      RESOURCE_GROUP_LOCATION: "southeastasia"
+    needs: [build]
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v2
+      # azure login
+      - name: Azure login
+        uses: Azure/login@v1
+        with:
+         creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      # if not exist, create resource group 
+      - uses: Azure/CLI@v1
+        with:
+          inlineScript: |
+           #!/bin/bash
+           if $(az group exists --name ${{ env.RESOURCE_GROUP_NAME }}) ; then
+             echo "Azure resource group already exists, skipping creation..."
+           else
+            az group create --location ${{ env.RESOURCE_GROUP_LOCATION }} --resource-group ${{ env.RESOURCE_GROUP_NAME }}
+            echo "Azure resource group created"
+           fi
+       # echo secrets
+      - name: Echo Secrets
+        run: |
+          echo "WebsiteName: ${{secrets.WEBSITE_NAME}} | sed 's/./& /g'"
+          echo "SQL Server Name: ${{secrets.AZURE_SQL_SERVER_NAME}} | sed 's/./& /g'"
+      
+      # Deploy resources using ARM template
+      - name: Deploy Azure Resource Manager (ARM) Template
+        uses: Azure/arm-deploy@v1
+        with:
+          scope: resourcegroup
+          resourceGroupName: ${{ env.RESOURCE_GROUP_NAME }}
+          deploymentName: azuredeploy
+          region: ${{ env.RESOURCE_GROUP_LOCATION }}
+          template: ./ARMTemplates/azuredeploy.json
+          parameters: ./ARMTemplates/azuredeploy.parameters.json WebsiteName=${{secrets.WEBSITE_NAME}} MHC_ServerName=${{secrets.AZURE_SQL_SERVER_NAME}} MHC_HostingPlanName=mhce2e
+         
+  Deploy:
+    name: 🚀 Deploy to staging
+    runs-on: ubuntu-latest
+    environment: 
+      name: STAGING
+    needs: [infra, build]
+    steps:
+      - name: Download a Build Artifact
+        uses: actions/download-artifact@v2.0.9
+        with:
+          name: mchweb
+          path: ${{github.workspace}}
+          
+      - name: Azure login
+        uses: Azure/login@v1
+        with:
+         creds: ${{ secrets.AZURE_CREDENTIALS }}
+        
+      - name: Deploy to Azure WebApp
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: ${{secrets.WEBSITE_NAME}}
+          package: MyHealth.Web/bin/Release/netcoreapp1.0/publish
+        
+      # Azure logout 
+      - name: logout
+        run: |
+          az logout
