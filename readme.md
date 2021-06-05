@@ -19,7 +19,7 @@ You can find the old, original code on this [GitHub repo](https://github.com/Mic
 
 Here's links to blog posts related to this project:
 
-[Connect(“demos”);](http://blogs.msdn.com/b/visualstudio/archive/2015/12/08/connect-demos-2015-healthclinic-biz.aspx) // 2015: HealthClinic.biz by Erika Ehrli
+[Connect(“demos”);](https://blogs.msdn.com/b/visualstudio/archive/2015/12/08/connect-demos-2015-healthclinic-biz.aspx?WT.mc_id=devops-0000-dabrady) // 2015: HealthClinic.biz by Erika Ehrli
 [ASP.NET 5 and .NET Core RC1 in context Plus all the Connect 2015]http://www.hanselman.com/blog/ASPNET5AndNETCoreRC1InContextPlusAllTheConnect2015News.aspx News by Scott Hanselman
 
 ## Licenses
